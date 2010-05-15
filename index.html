@@ -4,7 +4,7 @@
 <style>
 textarea {
   width: 500px;
-  height: 400px;
+  height: 100px;
 }
 </style>
 <script>
@@ -21,123 +21,91 @@ function trim(str) {
 
 function replacer(match, inner, offset, s) {
     inner = inner.substring(1).substring(0,inner.length-2)
-    return "." + lookup(inner);
+    return  "." + lookup(inner);
 }
+
 function get_var_name(str) {
-  str = str.replace(/(\[[^\]]\]+)/g, replacer);
+  console.log("getting " + str)
+  str = str.replace(/(\[[^\]]+\])/g, replacer);
   return str;
 }
 
-var variable = "[\\s]*([a-zA-Z\\']{1}[\\w\\.\\[\\]]*)[\\s]*";
-var number = "[\\s]*([\\d]+)[\\s]*";
-var other = number;
 var funcs = {
   equal: function(a, b) {
      return a == b;
   }
-
 }
 var returns = [];
-function exec(line) {
-    if (match = line.match(new RegExp("^"+variable+"\\=" + number +"$"))) { //a = 12
-        var ee = match[1];
-        ee = get_var_name(ee);
-        var or = match[2];
-        assign(ee, or);
-    } else if (match = line.match(new RegExp("^" + variable + "\\=" + variable + "$"))) { //  /^[\s]*([\w\.\[\]]+)[\s]*\=[\s]*([\a-zA-Z]{1}[\w\.\[\]]*)[\s]*$/)) { //houses = eight;
-       var ee = match[1];
-       ee = get_var_name(ee);
-       var or = match[2];
-       or = lookup(or);
-       assign(ee,or);
-    } else if (match = line.match(new RegExp("^" + variable + '\\=[\\s]*\\"(.*)\\"[\\s]*$'))) {   //  /^[\s]*([\w\.\[\]]+)[\s]*\=[\s]*\"(.*)\"[\s]*$/)) { //houses = "eight";
-       var ee = match[1];
-       ee = get_var_name(ee);
-       var or = match[2];
-       assign(ee,or);
-   // } else if (match = line.match(new RegExp("^" + variable + "$"))) {
-   //     ret = lookup(match[1]);
-   //     console.log(ret);
-    } else if (match = line.match(new RegExp("^" + variable + "\\=" + "[\\s]*\\[" + "(.*)" + "\\]$" ))) {
-      var ee = match[1];
-      var or = match[2];
-      var arr = or.split(" ");
-      for (var i in arr) {
-          assign(ee + "." + i, lookup(arr[i]));
-      }
-      console.log(match[2]);
-    } else if (match = line.match(/^([\s]*)([\w]+):/)) { print: //todo don't rememer parenthasized submatch
-        liner = match[0];
-        spaces = match[1].length;
-        func = match[2];
-        console.log(func)
-        var i = 0
-        var next = 0;
-        assign(func, pc + 1);
-        while (1) {
-            pc++;
-            if (pc >= lines.length) {
-              break;
-            }
-            next = lines[pc];
-            if (next.match(new RegExp("^[\\s]{"+spaces+"}[^\\s]{1}"))) {
-                pc--;
-                break;
-            } else {
-            }
-            
+var last_if = false;
+
+
+function tokenize(line) {
+    line = line.split("");
+    i = 0;
+    var state = "out";
+    var cur_token = []
+    var tokens = [];
+    var last_chr = "";
+    while (i < line.length) {
+        chr = line[i];
+        if (chr == " " && state == "out") {
+            tokens.push(cur_token.join(""))
+            cur_token = []
+        } else if (chr == '"' && state == "out") {
+            state = "in";
+            cur_token.push("'")
+        } else if (chr == '"' && state == "in" && last_chr != "\\") {
+            state = "out";
+        } else {
+             cur_token.push(chr)
         }
         
-        /*while (1) {
-            pc++;
-            if (pc >= lines.length) {
-              break;
-            }
-            next = lines[pc];
-            if (next.match(new RegExp("^[\\s]{"+spaces+"}"))) {
-                break;
-            } else {
-                next_match = next.match(/^[\s]*(.*)$/)
-                assign(func + "." + i, next_match[1])
-            }
-            i++;
-        }
-        console.log(match);*/
-    } else if (match = line.match(new RegExp("^(" + variable + ")\\(\\)"))) { //print()
-        var to = match[1];
-        to = trim(to)
-        console.log("trimmed is " + to);
-        
-        returns.push(pc)
-        pc = lookup(to) - 1;
-        console.log(pc)
-    //not used
-    } else if (match = line.match(/^[\s]*([\w]+)[\s]{1}([\w]+.*)$/)) { //print whatever you want
-        func = match[1];
-        if (func in funcs) {
-            return funcs[func].apply( )
-        }
-    } else if (line.match(/^[\s]*return/)){
-       ret = returns.pop();
-       pc = ret;
-        console.log(pc)
-    } else {
-       console.log("no");
+        last_chr = chr;
+        i++
     }
+    tokens.push(cur_token.join(""))
+    //console.log(tokens)
+    return tokens
+}
+
+function exec(tokens, line) {
+  console.log(tokens)
+  console.log(line)
+  if (tokens.length == 1) {
+      return lookup(tokens[0])
+  }
+  
+  if (tokens[1] == "=") {
+    tokens_after_equals = tokens.slice(2)
+    line_after_equals = line.substr(line.indexOf(" =") + 2);
+    exec_after_equal = exec(tokens_after_equals, line_after_equals);
+    assign(tokens[0], exec_after_equal)
+  }
+ 
+ 
+  
 }
 
 function lookup(v) {
   
+  if (v.match(/^[\d]/)) {
+      return v;
+  }
   if (v.substr(0,1) == "'")
   return v.substring(1);
   
   v = get_var_name(v);
-  console.log("looking up " + v)
-  return scope[v];
+  
+  if (v in scope) {
+      return scope[v];
+  } else {
+    return v
+  }
+  
 }
 
 function assign(ee,or){
-
+  ee = get_var_name(ee);
   for (var i in scope) {
       if (i.match(new RegExp("^" + ee + "\\.*"))) {
           delete scope[i];
@@ -156,11 +124,33 @@ function parse(txt) {
   lines = txt.split("\n");
   var line;
   var iters = 0;
+  var next_len;
   while (pc < lines.length && iters < 25) {
       iters++
       line = lines[pc]
-      exec(line);
-      pc++;
+      match = line.match(/^[\s]*/)
+      space_len = match[0]; 
+      tokens = tokenize(line)
+      exec(tokens,line);
+      
+      pc = pc + 1
+      next_pc = pc
+      while (next_pc < lines.length) {
+          next_line = lines[next_pc];
+          match = next_line.match(/^[\s]*/)
+          next_space_len = match[0]
+          
+          if (next_space_len > space_len) {
+              //skip
+          } else if (next_space_len < space_len) {
+             //return
+          } else if (next_space_len == space_len) {
+              pc = next_pc;
+              break;
+          }
+          next_pc++
+      }
+      
   }
   pc = 0;
   
