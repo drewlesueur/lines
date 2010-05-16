@@ -4,7 +4,7 @@
 <style>
 textarea {
   width: 500px;
-  height: 400px;
+  height: 200px;
 }
 
 * {
@@ -77,6 +77,9 @@ function get_var_name(str) {
 var funcs = {
   equal: function(a, b) {
      return a == b;
+  },
+  print: function(tokens, line) {
+    console.log(lookup(tokens[0]))
   }
 }
 var returns = [];
@@ -126,6 +129,8 @@ function exec(tokens, line) {
     line_after_equals = line.substr(line.indexOf(" =") + 2);
     exec_after_equal = exec(tokens_after_equals, line_after_equals);
     assign(tokens[0], exec_after_equal)
+  } else if (tokens[0] == "if"){
+      
   } else if (tokens[tokens.length-1] == ":") {
       assign(tokens[0], pc + 1);
   } else if (tokens.length == 1 && _s(tokens[0],-2) == "()") {
@@ -134,12 +139,22 @@ function exec(tokens, line) {
       returns.push(pc + 1)
       pc = line - 1
       on_jump = true;
-      console.log("moving pc to " + pc)
-      console.log("the function we are calling is" + func)
   } else if (tokens.length == 1) {
       return lookup(tokens[0]);
-  } else {
-      console.log("didn't match anything" + tokens[0])
+  } else { //normal fuction call
+      var func = tokens[0];
+      if (func in funcs) {
+          sub_token = _s(tokens,1);
+          sub_line = _s(line, tokens[0].length)
+          return funcs[func](sub_token, sub_line)
+      } else if (func in scope) {
+          assign("args", _s(tokens, 1))
+          assign("raw_args", _s(line, tokens[0].length))
+          new_pc = lookup(func);
+          returns.push(pc + 1)
+          pc = new_pc - 1
+          on_jump = true;
+      }
   }
  
 }
@@ -170,10 +185,17 @@ function assign(ee,or){
       }
   }
   scope[ee] = or
-  if (typeof or == "string" && or.length > 1)
-  for (var i = 0; i < or.length; i++) {
-          assign(ee + "." + i, or.charAt(i));
+  if (typeof or == "string" && or.length > 1) {
+      for (var i = 0; i < or.length; i++) {
+              assign(ee + "." + i, or.charAt(i));
+      }
   }
+  if (typeof or == "object") {
+    for (var i in or) {
+        assign(ee + "." + i, or[i])
+    }
+  }
+  
 }
 
 function parse(txt) {
@@ -186,10 +208,7 @@ function parse(txt) {
   function while2() { //comment this out
       iters++
       line = lines[pc]
-      
       document.getElementById("bar").style.top = 16 * pc + "px"
-      console.log(pc)
-      console.log(line)
       match = line.match(/^[\s]*/)
       space_len = match[0]; 
       tokens = tokenize(trim(line))
@@ -201,7 +220,6 @@ function parse(txt) {
         on_jump = false;
         next_pc = pc
         while (next_pc < lines.length) {
-            console.log("inner loop")
             next_line = lines[next_pc];
             match = next_line.match(/^[\s]*/)
             next_space_len = match[0]
@@ -219,7 +237,6 @@ function parse(txt) {
             next_pc++
         }
       } else {
-          console.log("on_jump is true")
           on_jump = false;
       }
       
