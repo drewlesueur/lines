@@ -4,28 +4,72 @@
 <style>
 textarea {
   width: 500px;
-  height: 100px;
+  height: 400px;
+}
+
+* {
+padding: 0;
+margin: 0;
+}
+#bar{
+  width: 300px;
+  height: 16px;
+  background-color: blue;
+  opacity: 0.25;
+  position: absolute;
+  left: 0px;
 }
 </style>
 <script>
+
+function _s(val, start, end) {
+  var need_to_join = false;
+  var ret = []
+  if (typeof val == "string") {
+    val = val.split("")
+    need_to_join = true;
+  }
+  if (start >= 0) {
+  } else {
+      start = val.length + start
+  }
+  
+  if (end == null) {
+     ret = val.slice(start)
+  } else {
+      if (end < 0) {
+        end = val.length + end; 
+      } else {
+        end = end + start
+      }
+      ret = val.slice(start, end)
+  }
+    
+  if (need_to_join) {
+      return ret.join("")
+  } else {
+      return ret;
+  }
+}
+
 var pc = 0;
 var scope = {};
 var types = {};
 var lines;
+var on_jump = false;
 function trim(str) {
-      match = str.match(/^[\s]*([^\s]+)[\s]*$/);
+      match = str.match(/^[\s]*(.*)[\s]*$/);
       if (match) {
           return match[1];
-      }
+      } 
 }
 
 function replacer(match, inner, offset, s) {
     inner = inner.substring(1).substring(0,inner.length-2)
-    return  "." + lookup(inner);
+    return  lookup(inner);
 }
 
 function get_var_name(str) {
-  console.log("getting " + str)
   str = str.replace(/(\[[^\]]+\])/g, replacer);
   return str;
 }
@@ -40,12 +84,14 @@ var last_if = false;
 
 
 function tokenize(line) {
+    
     line = line.split("");
     i = 0;
     var state = "out";
     var cur_token = []
     var tokens = [];
     var last_chr = "";
+   
     while (i < line.length) {
         chr = line[i];
         if (chr == " " && state == "out") {
@@ -56,6 +102,10 @@ function tokenize(line) {
             cur_token.push("'")
         } else if (chr == '"' && state == "in" && last_chr != "\\") {
             state = "out";
+        } else if (chr.match(/:/) && state == "out") {
+           tokens.push(cur_token.join(""))
+           tokens.push(chr)
+           cur_token = []
         } else {
              cur_token.push(chr)
         }
@@ -63,27 +113,35 @@ function tokenize(line) {
         last_chr = chr;
         i++
     }
-    tokens.push(cur_token.join(""))
-    //console.log(tokens)
+    if (cur_token.length > 0) {
+        tokens.push(cur_token.join(""))
+    }
     return tokens
 }
 
 function exec(tokens, line) {
-  console.log(tokens)
-  console.log(line)
-  if (tokens.length == 1) {
-      return lookup(tokens[0])
-  }
   
   if (tokens[1] == "=") {
     tokens_after_equals = tokens.slice(2)
     line_after_equals = line.substr(line.indexOf(" =") + 2);
     exec_after_equal = exec(tokens_after_equals, line_after_equals);
     assign(tokens[0], exec_after_equal)
+  } else if (tokens[tokens.length-1] == ":") {
+      assign(tokens[0], pc + 1);
+  } else if (tokens.length == 1 && _s(tokens[0],-2) == "()") {
+      var func = _s(tokens[0],0,-2)
+      line = lookup(func);
+      returns.push(pc + 1)
+      pc = line - 1
+      on_jump = true;
+      console.log("moving pc to " + pc)
+      console.log("the function we are calling is" + func)
+  } else if (tokens.length == 1) {
+      return lookup(tokens[0]);
+  } else {
+      console.log("didn't match anything" + tokens[0])
   }
  
- 
-  
 }
 
 function lookup(v) {
@@ -112,8 +170,6 @@ function assign(ee,or){
       }
   }
   scope[ee] = or
-  console.log(ee + "=" + or )
- 
   if (typeof or == "string" && or.length > 1)
   for (var i = 0; i < or.length; i++) {
           assign(ee + "." + i, or.charAt(i));
@@ -125,39 +181,60 @@ function parse(txt) {
   var line;
   var iters = 0;
   var next_len;
-  while (pc < lines.length && iters < 25) {
+  
+  //while (pc < lines.length && iters < 25) { //uncomment this
+  function while2() { //comment this out
       iters++
       line = lines[pc]
+      
+      document.getElementById("bar").style.top = 16 * pc + "px"
+      console.log(pc)
+      console.log(line)
       match = line.match(/^[\s]*/)
       space_len = match[0]; 
-      tokens = tokenize(line)
-      exec(tokens,line);
+      tokens = tokenize(trim(line))
+           
+      exec(tokens,trim(line));
+      pc = pc + 1 
       
-      pc = pc + 1
-      next_pc = pc
-      while (next_pc < lines.length) {
-          next_line = lines[next_pc];
-          match = next_line.match(/^[\s]*/)
-          next_space_len = match[0]
-          
-          if (next_space_len > space_len) {
-              //skip
-          } else if (next_space_len < space_len) {
-             //return
-          } else if (next_space_len == space_len) {
-              pc = next_pc;
-              break;
-          }
-          next_pc++
+      if (!on_jump) {
+        on_jump = false;
+        next_pc = pc
+        while (next_pc < lines.length) {
+            console.log("inner loop")
+            next_line = lines[next_pc];
+            match = next_line.match(/^[\s]*/)
+            next_space_len = match[0]
+            if (next_space_len > space_len) {
+                //skip
+            } else if (next_space_len < space_len) {
+               
+               pc = returns.pop()
+               break;
+            } else if (next_space_len == space_len) {
+                pc = next_pc;
+                
+                break;
+            }
+            next_pc++
+        }
+      } else {
+          console.log("on_jump is true")
+          on_jump = false;
       }
       
+      //comment this out
+      if (iters < 25 && pc < lines.length) {
+        setTimeout(while2, 500)
+      }
   }
   pc = 0;
-  
+  while2(); //comment this out
 }
 </script>
 </head>
 <body>
+<div id="bar"> </div>
 <textarea id="t"></textarea>
 <br>
 <input type="button" onclick="parse(document.getElementById('t').value)" value="run">
